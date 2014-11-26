@@ -53,7 +53,7 @@ public class SystemComponentChecklist extends PreferenceActivity {
         super.onCreate(savedInstanceState);
         addPreferencesFromResource(R.xml.checklist);
 
-        if (Installer.iodineInstalled()) {
+        if (new Installer(this).iodineInstalled()) {
             Intent intent = new Intent().setClass(this, TunnelListPreferences.class);
             startActivity(intent);
             finish();

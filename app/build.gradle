@@ -1,5 +1,4 @@
 apply plugin: 'com.android.application'
-
 android {
     compileSdkVersion 21
     buildToolsVersion "21.1.1"
@@ -18,4 +17,58 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_7
         targetCompatibility JavaVersion.VERSION_1_7
     }
+
+    aaptOptions{
+        noCompress 'bin'
+    }
+}
+
+task iodineMake(type: Exec, description: 'Run make on iodine') {
+    workingDir 'iodine/src'
+    commandLine 'make', 'base64u.h', 'base64u.c'
+}
+
+task iodineNdkBuild(type: Exec, description: 'Compile iodine') {
+    dependsOn iodineMake
+    workingDir 'iodine/src'
+    def ndkBuild = new File(project.plugins.findPlugin('com.android.application').getNdkFolder(), 'ndk-build')
+    commandLine ndkBuild,
+            'NDK_PROJECT_PATH=.',
+            'APP_BUILD_SCRIPT=Android.mk',
+            'APP_ABI=armeabi armeabi-v7a x86 mips',
+            'APP_PLATFORM=android-16'
+}
+task iodineMove(type: Copy, description: 'Move iodine to assets') {
+    dependsOn iodineNdkBuild
+    from('iodine/src/libs/'){
+        rename 'iodine', 'iodine.bin'
+    }
+    into 'src/main/assets/'
+}
+task iodine {
+    dependsOn iodineMove
+}
+task iodineMakeClean(type: Exec) {
+    workingDir 'iodine/src'
+    commandLine 'make', 'clean'
+}
+task iodineNdkClean(type: Exec) {
+    dependsOn iodineMakeClean
+    workingDir 'iodine/src'
+    def ndkBuild = new File(project.plugins.findPlugin('com.android.application').getNdkFolder(), 'ndk-build')
+    commandLine ndkBuild,
+            'NDK_PROJECT_PATH=.',
+            'APP_BUILD_SCRIPT=Android.mk',
+            'clean'
+}
+task iodineCleanAssets(type: Delete){
+    delete 'src/main/assets/'
+}
+task iodineClean {
+    dependsOn iodineNdkClean, iodineCleanAssets
+}
+tasks.preBuild.dependsOn iodine
+tasks.clean.dependsOn iodineClean
+
+dependencies {
 }

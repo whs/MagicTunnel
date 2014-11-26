@@ -24,9 +24,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.util.Arrays;
+import java.util.List;
 
 import android.content.Context;
 import android.content.res.AssetManager;
+import android.os.Build;
 import android.util.Log;
 
 /**
@@ -47,14 +50,13 @@ public class Installer {
     /** The final location of the iodine file. */
     public static final String DNS_TUNNEL_FILE = "/system/bin/iodine";
 
-    /** The iodine executable file in our assets. */
-    public static final String DNS_TUNNEL_ASSET = "iodine";
-
     /** Size of the buffer for copy operations. */
     private static final int BUFFER_SIZE = 512;
 
     /** 500 ms for timeout during install operation. */
-    private static final int TIMEOUT = 500;
+    private static final int TIMEOUT = 1000;
+
+    private static final List<String> SUPPORTED_ABI = Arrays.asList(new String[]{"armeabi", "armeabi-v7a", "mips", "x86"});
 
     /** Asset manager. */
     private AssetManager mAssets;
@@ -160,9 +162,37 @@ public class Installer {
      *
      * @return Whether the iodine client is installed.
      */
-    public static boolean iodineInstalled() {
+    public boolean iodineInstalled() {
         File file = new File(DNS_TUNNEL_FILE);
-        return file.exists();
+        if(!file.exists()){
+            return false;
+        }
+        String binaryPath = getIodineBinary();
+        long installedSize, size;
+        try {
+            installedSize = mAssets.openFd(binaryPath).getLength();
+            size = file.length();
+        } catch (IOException e) {
+            Log.e(Installer.class.getName(), "Cannot get size of binary", e);
+            return false;
+        }
+        if(installedSize != size){
+            Log.i(
+                    Installer.class.getName(),
+                    "Binary size mismatch: installed " + installedSize + " shipped " + size + " path " + binaryPath
+            );
+            return false;
+        }
+        return true;
+    }
+
+    public static String getIodineBinary(){
+        String abi = Build.CPU_ABI;
+        if(!SUPPORTED_ABI.contains(abi)){
+            Log.w(Installer.class.getName(), "ABI " + abi + " is not supported. Installing armeabi binary");
+            abi = "armeabi";
+        }
+        return new File(abi, "iodine.bin").getPath();
     }
 
     /**
@@ -175,7 +205,8 @@ public class Installer {
         }
 
         //Copy the file to private storage
-        if (!installFile(DNS_TUNNEL_ASSET, DNS_TUNNEL_LOCALFILE)) {
+        if (!installFile(getIodineBinary(), DNS_TUNNEL_LOCALFILE)) {
+            Log.e(Installer.class.getName(), "Cannot copy iodine to temporary file");
             return false;
         }
 
@@ -183,6 +214,7 @@ public class Installer {
         //to the root partition
         if (!generateInstallScript(TARGET_PARTITION,
                 DNS_TUNNEL_LOCALFILE, DNS_TUNNEL_FILE)) {
+            Log.e(Installer.class.getName(), "Cannot create install script");
             return false;
         }
 
